@@ -8,17 +8,39 @@ import os
 import time
 
 
-#testgit1
-
 class cAggregator(object):
     def __init__(self):
         self.test = None
+
+    # checkthepreviousfile
+
+
+    def readLog(self):
+        """
+        read log.txt and gets the second to last date to compare
+        :return: seoncd to lastline
+        """
+        with open("log.txt", "r") as myLog:
+            previousDate = myLog.readlines()[-2]
+            return previousDate
+
+    def writeLog(self):
+        with open("log.txt", "a") as myLog:
+            date = self.getDateTime()
+            myLog.write('\n')
+            myLog.write(date)
+
+    def checkLog(self):
+        with open("log.txt", "r") as myLog:
+            for line in myLog:
+                print(line)
 
 
     def getDateTime(self):
             datenow = datetime.datetime.now()
             mydate = '%s%s%s' % (datenow.year, datenow.month, datenow.day)
             return mydate
+
 
 
     def cleanOuput(self, outputCSV):
@@ -31,13 +53,20 @@ class cAggregator(object):
             dataframe = dataframe.drop(['Unnamed: 0'], axis=1)
         except KeyError:
             pass
-        dataframe.to_csv(name[:-4] + '-clean.csv', index=False)
+        dataframe.to_csv(name[:-4] + '.csv', index=False)
 
 
     def readOutput(self, outputCSV):
         df = pd.read_csv(outputCSV)
         return df
 
+
+
+    def requestHalftijds(self):
+            pagelink = 'https://www.halftijds.be/vacatures'
+            pageresponse = requests.get(pagelink, timeout=5)
+            pagecontent = BeautifulSoup(pageresponse.content, "html.parser")
+            return pagecontent
 
     def requestCultuurjobs(self):
             pagelink ='http://www.cultuurjobs.be/'
@@ -83,6 +112,27 @@ class cAggregator(object):
 
 
 
+    def getHalftijds(self, pagecontenthalftijds):
+        halftijds = {"site": [], "job": [], "locatie": [], "werkgever": [], "statuut": []}
+        jobs = pagecontenthalftijds.findAll("a", {"class": "summary-title-link"})
+        for item in jobs:
+            halftijds["job"].append(item.text.lower())
+            halftijds["site"].append("halftijds.be")
+
+        description = pagecontenthalftijds.findAll("div", {"class": "summary-excerpt summary-excerpt-only"})
+        for item in description:
+            text = item.text.lower()
+            splitText = text.split("°")
+            halftijds["werkgever"].append(splitText[0])
+            halftijds["locatie"].append(splitText[1])
+            halftijds["statuut"].append(splitText[2])
+
+        return halftijds
+
+        # dfHaltijds = pd.DataFrame.from_dict(halftijds)
+
+
+
     def getFaro(self, pagecontentfaro):
         faro = {"site": [], "job": [], "deadline": [], "werkgever": []}
         table = pagecontentfaro.findAll("tr")
@@ -100,16 +150,23 @@ class cAggregator(object):
 
 
     def writeToFile(self):
-        """scrapes the webpages and write to a file entitled output-YYYYYMMDD.csv"""
+        """scrapes the webpages and write to a file entitled output-YYYYYMMDD.csv in output folder"""
         mydate = self.getDateTime()
+        #halftijds
+        pageContentHalftijds = self.requestHalftijds()
+        halftijds = self.getHalftijds(pageContentHalftijds)
+        dfHalftijds = pd.DataFrame.from_dict(halftijds)
+        #cultuurjobs
         pageContentCultuurjobs = self.requestCultuurjobs()
         cultuurjobs = self.getCultuurjobs(pageContentCultuurjobs)
-        dfCultuurjobs = pd.DataFrame.from_dict(cultuurjobs)
+        dfCultuurjobs = pd.DataFrame.from_dict(cultuurjobs) #make df from dict
+        #faro
         pageContentFaro = self.requestFaro()
         faro = self.getFaro(pageContentFaro)
-        dfFaro = pd.DataFrame.from_dict(faro)
+        dfFaro = pd.DataFrame.from_dict(faro)  #make df from dict
         df3 = pd.merge(dfCultuurjobs, dfFaro, how='outer')
-        df3.to_csv('output-' + mydate + '.csv')
+        df3 = pd.merge(df3, dfHalftijds, how='outer')
+        df3.to_csv('output/output-' + mydate + '.csv')
 
 
     #def fixEncoding(self):
@@ -177,9 +234,12 @@ if __name__ == "__main__":
 
     print("testing")
     c = cAggregator()
-    #c.cleanOuput("output-20231113.csv")
-    #c.compareData("output-20231110-clean.csv", "output-20231113-clean.csv")
-    #c.getDateTime()
+    #c.cleanOuput("output/output-20231212.csv")
+    c.compareData("output/output-20231129.csv", "output/output-20231212.csv")
+    #test = c.getDateTime()
+    #test = c.readLog()
+    #print(test)
+    #c.writeLog()
     #c.writeToFile()
     #c.allMethods()
     #c.readCompare()
